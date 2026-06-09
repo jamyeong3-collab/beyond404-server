@@ -2,12 +2,16 @@ package com.swapit.controller;
 
 import com.swapit.dto.BookingRequest;
 import com.swapit.dto.CreateSwapRequestRequest;
+import com.swapit.dto.InstantCallRequest;
 import com.swapit.dto.PhotoUploadRequest;
+import com.swapit.dto.ReReviewRequest;
 import com.swapit.dto.SwapRequestResponse;
+import com.swapit.dto.UpdateApplianceRequest;
 import com.swapit.service.SwapRequestService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -33,6 +37,19 @@ public class SwapRequestController {
         return swapRequestService.analyzePhoto(id, request);
     }
 
+    @PatchMapping("/{id}/appliance")
+    public SwapRequestResponse updateAppliance(
+            @PathVariable long id,
+            @RequestBody UpdateApplianceRequest request
+    ) {
+        return swapRequestService.updateAppliance(id, request);
+    }
+
+    @PostMapping("/{id}/pre-valuation/accept")
+    public SwapRequestResponse acceptPreValuation(@PathVariable long id) {
+        return swapRequestService.acceptPreValuation(id);
+    }
+
     @PostMapping("/{id}/booking")
     public SwapRequestResponse confirmBooking(
             @PathVariable long id,
@@ -41,9 +58,40 @@ public class SwapRequestController {
         return swapRequestService.confirmBooking(id, request);
     }
 
+    @PostMapping("/{id}/instant-call")
+    public SwapRequestResponse requestInstantCall(
+            @PathVariable long id,
+            @Valid @RequestBody InstantCallRequest request
+    ) {
+        return swapRequestService.requestInstantCall(id, request);
+    }
+
+    @GetMapping("/{id}/tracking")
+    public SwapRequestResponse getTracking(@PathVariable long id) {
+        return swapRequestService.getTracking(id);
+    }
+
     @PostMapping("/{id}/final-valuation/mock")
     public SwapRequestResponse completeMockFinalValuation(@PathVariable long id) {
         return swapRequestService.completeMockFinalValuation(id);
+    }
+
+    @PostMapping("/{id}/re-review")
+    public SwapRequestResponse requestReReview(
+            @PathVariable long id,
+            @Valid @RequestBody ReReviewRequest request
+    ) {
+        return swapRequestService.requestReReview(id, request);
+    }
+
+    @PostMapping("/{id}/re-review/mock-complete")
+    public SwapRequestResponse completeMockReReview(@PathVariable long id) {
+        return swapRequestService.completeMockReReview(id);
+    }
+
+    @PostMapping("/{id}/credits")
+    public SwapRequestResponse issueCredit(@PathVariable long id) {
+        return swapRequestService.issueCredit(id);
     }
 
     @GetMapping("/{id}")
@@ -51,4 +99,3 @@ public class SwapRequestController {
         return swapRequestService.get(id);
     }
 }
-
