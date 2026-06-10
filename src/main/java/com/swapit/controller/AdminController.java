@@ -44,7 +44,12 @@ public class AdminController {
         return Map.of(
                 "totalSwapRequests", requests.size(),
                 "availableCrewCalls", swapRequestService.getAvailableCalls().size(),
-                "message", "MVP 관리자 요약 Mock 데이터입니다."
+                "message", "MVP admin summary mock data."
         );
+    }
+
+    @PostMapping("/reset-demo-state")
+    public Map<String, Object> resetDemoState() {
+        return swapRequestService.resetDemoState();
     }
 }

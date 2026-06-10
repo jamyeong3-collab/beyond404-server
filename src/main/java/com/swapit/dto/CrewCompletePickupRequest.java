@@ -2,6 +2,8 @@ package com.swapit.dto;
 
 public record CrewCompletePickupRequest(
         String pickupPhotoFileName,
-        String inspectionMemo
+        String hubPhotoFileName,
+        String inspectionMemo,
+        String hubMemo
 ) {
 }

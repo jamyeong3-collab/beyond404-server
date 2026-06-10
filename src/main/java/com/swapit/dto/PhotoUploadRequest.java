@@ -4,7 +4,10 @@ import jakarta.validation.constraints.NotBlank;
 
 public record PhotoUploadRequest(
         @NotBlank String fileName,
+        String exteriorPhotoFileName,
+        String labelPhotoFileName,
         String imageUrl,
-        String applianceType
+        String applianceType,
+        Boolean agreedToCreditPolicy
 ) {
 }

@@ -9,14 +9,18 @@ public record SwapRequestResponse(
         long customerId,
         String status,
         Appliance appliance,
+        UserConsent userConsent,
+        CaptureEvidence captureEvidence,
         PreValuation preValuation,
         Booking booking,
         PickupRequest pickupRequest,
+        DispatchInfo dispatchInfo,
         Tracking tracking,
         FinalValuation finalValuation,
         Credit credit,
         PickupResultReport pickupResultReport,
         RecyclingReport recyclingReport,
+        Settlement settlement,
         List<Notification> notifications
 ) {
     public record Appliance(
@@ -29,6 +33,23 @@ public record SwapRequestResponse(
             String aiAnalysisStatus,
             double aiConfidence,
             String uploadedFileName
+    ) {
+    }
+
+    public record UserConsent(
+            boolean agreedToCreditPolicy,
+            String notice,
+            LocalDateTime agreedAt
+    ) {
+    }
+
+    public record CaptureEvidence(
+            String exteriorPhotoFileName,
+            String labelPhotoFileName,
+            String pickupPhotoFileName,
+            String hubPhotoFileName,
+            String pickupInspectionMemo,
+            String hubMemo
     ) {
     }
 
@@ -57,7 +78,19 @@ public record SwapRequestResponse(
             Long crewId,
             String crewName,
             String address,
-            String scheduledAt
+            String scheduledAt,
+            List<NearbyCrew> nearbyCrews
+    ) {
+    }
+
+    public record DispatchInfo(
+            String alertMessage,
+            int matchScore,
+            int priorityRank,
+            int rejectCount,
+            int cancelCount,
+            int penaltyCount,
+            String recommendedReason
     ) {
     }
 
@@ -65,7 +98,18 @@ public record SwapRequestResponse(
             String message,
             LocalDateTime estimatedArrivalAt,
             DriverLocation driverLocation,
+            LocationPoint processingCenter,
+            String phase,
+            TrackingMetrics metrics,
+            List<NearbyCrew> nearbyCrews,
             List<TrackingEvent> events
+    ) {
+    }
+
+    public record LocationPoint(
+            String label,
+            double lat,
+            double lng
     ) {
     }
 
@@ -78,10 +122,28 @@ public record SwapRequestResponse(
     ) {
     }
 
+    public record NearbyCrew(
+            Long crewId,
+            String crewName,
+            String status,
+            double lat,
+            double lng,
+            double distanceMeters,
+            boolean assigned
+    ) {
+    }
+
     public record TrackingEvent(
             String eventType,
             String message,
             LocalDateTime createdAt
+    ) {
+    }
+
+    public record TrackingMetrics(
+            Double crewToPickupMeters,
+            Double crewToProcessingCenterMeters,
+            boolean locationLive
     ) {
     }
 
@@ -96,6 +158,16 @@ public record SwapRequestResponse(
     public record Credit(
             int amount,
             String currency,
+            String status
+    ) {
+    }
+
+    public record Settlement(
+            Integer baseFee,
+            Integer distanceFee,
+            Integer incentive,
+            Integer penalty,
+            Integer totalAmount,
             String status
     ) {
     }

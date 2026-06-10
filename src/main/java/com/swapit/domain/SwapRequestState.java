@@ -22,6 +22,10 @@ public class SwapRequestState {
     private String conditionGrade;
     private String aiAnalysisStatus;
     private double aiConfidence;
+    private boolean creditPolicyAgreed;
+    private LocalDateTime consentedAt;
+    private String exteriorPhotoFileName;
+    private String labelPhotoFileName;
 
     private int minEstimatedValue;
     private int maxEstimatedValue;
@@ -38,10 +42,13 @@ public class SwapRequestState {
     private String detailAddress;
     private Double pickupLat;
     private Double pickupLng;
+    private final List<SwapRequestResponse.NearbyCrew> nearbyCrews = new ArrayList<>();
 
     private String trackingMessage;
+    private String trackingPhase;
     private LocalDateTime estimatedArrivalAt;
     private SwapRequestResponse.DriverLocation driverLocation;
+    private SwapRequestResponse.LocationPoint processingCenter;
     private final List<SwapRequestResponse.TrackingEvent> trackingEvents = new ArrayList<>();
 
     private Integer finalCreditValue;
@@ -55,6 +62,23 @@ public class SwapRequestState {
     private String pickupResultType;
     private String pickupResultSummary;
     private final List<String> pickupResultDetails = new ArrayList<>();
+    private String pickupPhotoFileName;
+    private String hubPhotoFileName;
+    private String pickupInspectionMemo;
+    private String hubMemo;
+    private int dispatchMatchScore;
+    private int dispatchPriorityRank;
+    private int crewRejectCount;
+    private int crewCancelCount;
+    private int crewPenaltyCount;
+    private String dispatchAlertMessage;
+    private String dispatchRecommendedReason;
+    private Integer settlementBaseFee;
+    private Integer settlementDistanceFee;
+    private Integer settlementIncentive;
+    private Integer settlementPenalty;
+    private Integer settlementTotalAmount;
+    private String settlementStatus;
     private final List<SwapRequestResponse.Notification> notifications = new ArrayList<>();
     private long notificationSequence = 1;
 
@@ -65,17 +89,18 @@ public class SwapRequestState {
         this.applianceType = valueOrDefault(applianceType, "washing_machine");
         this.brand = "LG";
         this.modelName = "Unknown";
-        this.estimatedAge = "확인 필요";
-        this.exteriorCondition = "확인 필요";
+        this.estimatedAge = "Needs review";
+        this.exteriorCondition = "Needs review";
         this.conditionGrade = "unknown";
         this.aiAnalysisStatus = "PENDING";
         this.aiConfidence = 0.0;
         this.minEstimatedValue = 0;
         this.maxEstimatedValue = 0;
-        this.trackingMessage = "교환 신청이 생성되었어요.";
+        this.trackingPhase = "REQUEST_CREATED";
+        this.trackingMessage = "Your exchange request has been created.";
         this.estimatedArrivalAt = LocalDateTime.now().plusMinutes(35);
-        addTrackingEvent("CREATED", "교환 신청 생성");
-        addNotification("SwapIt 신청 시작", "교환할 가전을 촬영하고 예상 보상가를 확인해주세요.");
+        addTrackingEvent("CREATED", "Exchange request created");
+        addNotification("SwapIt started", "Upload an appliance photo to continue toward valuation and pickup.");
     }
 
     public long getId() {
@@ -90,24 +115,47 @@ public class SwapRequestState {
         return pickupStatus;
     }
 
-    public void applyMockInspection(String fileName, String requestedApplianceType, String imageUrl) {
-        this.uploadedFileName = valueOrDefault(fileName, imageUrl);
+    public Long getCrewId() {
+        return crewId;
+    }
+
+    public Double getPickupLat() {
+        return pickupLat;
+    }
+
+    public Double getPickupLng() {
+        return pickupLng;
+    }
+
+    public void applyMockInspection(
+            String fileName,
+            String requestedApplianceType,
+            String imageUrl,
+            String exteriorPhotoFileName,
+            String labelPhotoFileName,
+            Boolean agreedToCreditPolicy
+    ) {
+        this.exteriorPhotoFileName = valueOrDefault(exteriorPhotoFileName, valueOrDefault(fileName, imageUrl));
+        this.labelPhotoFileName = valueOrDefault(labelPhotoFileName, this.labelPhotoFileName);
+        this.uploadedFileName = this.exteriorPhotoFileName;
         if (requestedApplianceType != null && !requestedApplianceType.isBlank()) {
             this.applianceType = requestedApplianceType;
         }
+        this.creditPolicyAgreed = Boolean.TRUE.equals(agreedToCreditPolicy);
+        this.consentedAt = this.creditPolicyAgreed ? LocalDateTime.now() : this.consentedAt;
         this.brand = "LG";
         this.modelName = mockModelName(this.applianceType);
-        this.estimatedAge = "1~3년";
-        this.exteriorCondition = "사용 흔적 있음";
+        this.estimatedAge = "3-5 years";
+        this.exteriorCondition = "Minor exterior wear detected";
         this.conditionGrade = "good";
         this.aiAnalysisStatus = "COMPLETED";
         this.aiConfidence = 0.86;
-        this.minEstimatedValue = 1500;
-        this.maxEstimatedValue = 2400;
+        this.minEstimatedValue = 1800;
+        this.maxEstimatedValue = 3200;
         this.status = SwapRequestStatus.PRE_VALUATION_READY;
-        this.trackingMessage = "AI가 가전 정보를 인식했어요. 정보를 확인한 뒤 감정 단계로 진행해주세요.";
-        addTrackingEvent("PHOTO_ANALYZED", "가전 사진 분석 완료");
-        addNotification("AI 인식 완료", "가전 정보와 예상 보상가 범위를 확인해주세요.");
+        this.trackingMessage = "AI inspection is ready. Review the estimate and choose a pickup method.";
+        addTrackingEvent("PHOTO_ANALYZED", "Appliance photo analyzed");
+        addNotification("AI inspection complete", "Your appliance estimate is ready for review.");
     }
 
     public void updateAppliance(
@@ -122,15 +170,15 @@ public class SwapRequestState {
         this.modelName = valueOrDefault(modelName, this.modelName);
         this.estimatedAge = valueOrDefault(estimatedAge, this.estimatedAge);
         this.exteriorCondition = valueOrDefault(exteriorCondition, this.exteriorCondition);
-        this.conditionGrade = this.exteriorCondition.contains("파손") ? "damaged" : "good";
-        addTrackingEvent("APPLIANCE_CONFIRMED", "고객 가전 정보 확인");
+        this.conditionGrade = this.exteriorCondition.toLowerCase().contains("damage") ? "damaged" : "good";
+        addTrackingEvent("APPLIANCE_CONFIRMED", "Appliance details confirmed");
     }
 
     public void acceptPreValuation() {
         this.preValuationAccepted = true;
         this.status = SwapRequestStatus.PRE_VALUATION_ACCEPTED;
-        this.trackingMessage = "예상 보상가를 확인했어요. 수거 방식을 선택해주세요.";
-        addTrackingEvent("PRE_VALUATION_ACCEPTED", "예상 보상가 확인");
+        this.trackingMessage = "Pickup selection is ready. Choose booking or instant call.";
+        addTrackingEvent("PRE_VALUATION_ACCEPTED", "Pre-valuation accepted");
     }
 
     public void confirmBooking(LocalDate bookingDate, String bookingTime, String address, String detailAddress, Double pickupLat, Double pickupLng) {
@@ -144,9 +192,10 @@ public class SwapRequestState {
         this.pickupLat = pickupLat;
         this.pickupLng = pickupLng;
         this.status = SwapRequestStatus.BOOKING_CONFIRMED;
-        this.trackingMessage = "수거 예약이 확정되었어요.";
-        addTrackingEvent("BOOKING_CONFIRMED", "수거 예약 확정");
-        addNotification("수거 예약 완료", scheduledLabel() + " 수거 예약이 확정되었어요.");
+        this.trackingPhase = "AWAITING_CREW_ASSIGNMENT";
+        this.trackingMessage = "Scheduled pickup confirmed. Nearby crews can now view this request.";
+        addTrackingEvent("BOOKING_CONFIRMED", "Pickup booking confirmed");
+        addNotification("Booking confirmed", scheduledLabel() + " pickup has been confirmed.");
     }
 
     public void requestInstantCall(String address, String detailAddress, Double pickupLat, Double pickupLng) {
@@ -158,61 +207,86 @@ public class SwapRequestState {
         this.pickupLat = pickupLat;
         this.pickupLng = pickupLng;
         this.status = SwapRequestStatus.INSTANT_CALL_REQUESTED;
-        this.trackingMessage = "근처 LG 인증 수거 파트너를 찾고 있어요.";
-        addTrackingEvent("INSTANT_CALL_REQUESTED", "바로 콜 요청");
-        addNotification("바로 콜 요청 완료", "근처 수거 크루를 찾고 있어요.");
+        this.trackingPhase = "SEARCHING_NEARBY_CREW";
+        this.trackingMessage = "Looking for nearby LG-certified pickup crews.";
+        addTrackingEvent("INSTANT_CALL_REQUESTED", "Instant pickup call requested");
+        addNotification("Instant call requested", "Nearby crews are being matched to your location.");
     }
 
     public void acceptByCrew(long crewId, String crewName) {
         this.pickupRequestId = ensurePickupRequestId();
         this.crewId = crewId;
-        this.crewName = valueOrDefault(crewName, "LG 인증 수거 파트너");
+        this.crewName = valueOrDefault(crewName, "LG pickup partner");
         this.pickupStatus = "ASSIGNED";
         this.status = SwapRequestStatus.CREW_ASSIGNED;
-        this.trackingMessage = this.crewName + "님이 배정되었어요.";
-        addTrackingEvent("CREW_ASSIGNED", "크루 배정");
-        addNotification("수거 크루 배정", this.crewName + "님이 배정되었어요.");
+        this.trackingPhase = "CREW_ASSIGNED";
+        this.trackingMessage = this.crewName + " has been assigned to your pickup.";
+        addTrackingEvent("CREW_ASSIGNED", "Crew assigned");
+        addNotification("Crew assigned", this.crewName + " is now assigned to your pickup.");
     }
 
     public void departCrew() {
         this.pickupStatus = "IN_PROGRESS";
         this.status = SwapRequestStatus.PICKUP_IN_PROGRESS;
-        this.trackingMessage = "기사님이 이동 중이에요.";
+        this.trackingPhase = "EN_ROUTE_TO_PICKUP";
+        this.trackingMessage = "The crew is on the way to the pickup location.";
         this.estimatedArrivalAt = LocalDateTime.now().plusMinutes(18);
-        addTrackingEvent("CREW_DEPARTED", "크루 출발");
-        addNotification("수거 크루 출발", "LG 인증 수거 파트너가 이동 중이에요.");
+        addTrackingEvent("CREW_DEPARTED", "Crew departed toward pickup");
+        addNotification("Crew departed", "The assigned crew is heading to your location.");
     }
 
     public void updateCrewLocation(double lat, double lng, double heading, double speed) {
         this.driverLocation = new SwapRequestResponse.DriverLocation(lat, lng, heading, speed, LocalDateTime.now());
-        this.trackingMessage = "기사님이 이동 중이에요.";
-        addTrackingEvent("CREW_LOCATION_UPDATED", "크루 위치 업데이트");
+
+        if ("ARRIVED".equals(pickupStatus)) {
+            this.trackingPhase = "EN_ROUTE_TO_PROCESSING_CENTER";
+            this.trackingMessage = "Pickup completed. The crew is moving to the processing center.";
+            this.estimatedArrivalAt = LocalDateTime.now().plusMinutes(20);
+        } else if ("ASSIGNED".equals(pickupStatus) || "IN_PROGRESS".equals(pickupStatus)) {
+            this.trackingPhase = "EN_ROUTE_TO_PICKUP";
+            this.trackingMessage = "The crew is on the way to the pickup location.";
+        }
+
+        addTrackingEvent("CREW_LOCATION_UPDATED", "Crew location updated");
     }
 
     public void arriveCrew() {
         this.pickupStatus = "ARRIVED";
         this.status = SwapRequestStatus.CREW_ARRIVED;
-        this.trackingMessage = "기사님이 도착했어요.";
-        addTrackingEvent("CREW_ARRIVED", "크루 도착");
-        addNotification("수거 크루 도착", "LG 인증 수거 파트너가 도착했어요.");
+        this.trackingPhase = "PICKUP_CONFIRMED";
+        this.trackingMessage = "The crew arrived and is collecting the appliance.";
+        this.estimatedArrivalAt = LocalDateTime.now().plusMinutes(20);
+        addTrackingEvent("CREW_ARRIVED", "Crew arrived at pickup");
+        addNotification("Crew arrived", "The assigned crew has arrived at your location.");
     }
 
-    public void completePickup(String pickupPhotoFileName, String inspectionMemo) {
-        this.uploadedFileName = valueOrDefault(pickupPhotoFileName, this.uploadedFileName);
+    public void completePickup(String pickupPhotoFileName, String hubPhotoFileName, String inspectionMemo, String hubMemo) {
+        this.pickupPhotoFileName = valueOrDefault(pickupPhotoFileName, this.pickupPhotoFileName);
+        this.hubPhotoFileName = valueOrDefault(hubPhotoFileName, this.hubPhotoFileName);
+        this.pickupInspectionMemo = valueOrDefault(inspectionMemo, this.pickupInspectionMemo);
+        this.hubMemo = valueOrDefault(hubMemo, this.hubMemo);
+        this.uploadedFileName = valueOrDefault(this.pickupPhotoFileName, this.uploadedFileName);
         this.pickupStatus = "COMPLETED";
         this.status = SwapRequestStatus.FINAL_INSPECTION_IN_PROGRESS;
         this.finalValuationStatus = "INSPECTING";
-        this.trackingMessage = "수거 완료 후 최종 검수 중이에요.";
-        addTrackingEvent("PICKUP_COMPLETED", valueOrDefault(inspectionMemo, "수거 완료"));
-        addNotification("최종 검수 중", "수거품을 확인하고 있어요. 완료되면 알려드릴게요.");
+        this.trackingPhase = "COMPLETED";
+        this.trackingMessage = "Pickup is complete and the item is in final inspection.";
+        this.settlementBaseFee = 18000;
+        this.settlementDistanceFee = 3500;
+        this.settlementIncentive = 2000;
+        this.settlementPenalty = crewPenaltyCount > 0 ? 3000 : 0;
+        this.settlementTotalAmount = settlementBaseFee + settlementDistanceFee + settlementIncentive - settlementPenalty;
+        this.settlementStatus = "READY";
+        addTrackingEvent("PICKUP_COMPLETED", valueOrDefault(this.pickupInspectionMemo, "Pickup completed"));
+        addNotification("Final inspection", "The appliance has been picked up and is now being inspected.");
     }
 
     public void completeMockFinalValuation() {
         completeFinalValuation(1900, List.of(
-                "외관 상태: 전면 사용 흔적은 있으나 주요 파손은 확인되지 않았습니다.",
-                "부품 재사용 가능성: 일부 내부 부품은 재사용 가능성이 있어 보상가에 반영했습니다.",
-                "원자재 가치: 금속과 플라스틱 회수 가능 가치를 기준으로 산정했습니다.",
-                "처리 비용: 수거, 분류, 안전 해체 비용을 차감했습니다."
+                "Exterior condition and visible wear were reviewed.",
+                "Reusable components and parts value were estimated.",
+                "Material recovery value was considered.",
+                "Pickup and processing costs were included."
         ));
     }
 
@@ -220,13 +294,15 @@ public class SwapRequestState {
         this.finalCreditValue = amount == null ? 1900 : amount;
         this.finalValuationStatus = "READY";
         this.finalValuationReasons.clear();
-        this.finalValuationReasons.addAll(reasons == null || reasons.isEmpty() ? List.of("최종 검수 결과를 기준으로 산정했습니다.") : reasons);
+        this.finalValuationReasons.addAll(reasons == null || reasons.isEmpty()
+                ? List.of("Final valuation was prepared from inspection results.")
+                : reasons);
         this.creditStatus = "READY";
         this.status = SwapRequestStatus.FINAL_VALUATION_READY;
-        this.trackingMessage = "최종 감정가가 확정되었어요.";
+        this.trackingMessage = "Final valuation is ready.";
         createPickupResultReport();
-        addTrackingEvent("FINAL_VALUATION_READY", "최종 감정가 확정");
-        addNotification("검수 완료", "감정 결과를 확인해보세요.");
+        addTrackingEvent("FINAL_VALUATION_READY", "Final valuation ready");
+        addNotification("Inspection finished", "Review the final valuation and proceed to credit.");
     }
 
     public void requestReReview(String reason) {
@@ -237,20 +313,20 @@ public class SwapRequestState {
         this.reReviewReason = reason;
         this.status = SwapRequestStatus.RE_REVIEW_REQUESTED;
         this.finalValuationStatus = "RE_REVIEWING";
-        this.trackingMessage = "재검수 요청이 접수되었어요.";
-        addTrackingEvent("RE_REVIEW_REQUESTED", "재검수 요청: " + reason);
-        addNotification("재검수 접수", "담당자가 검수 결과를 다시 확인하고 있어요.");
+        this.trackingMessage = "Re-review requested.";
+        addTrackingEvent("RE_REVIEW_REQUESTED", "Re-review requested: " + reason);
+        addNotification("Re-review requested", "Your review request has been received.");
     }
 
     public void completeReReview() {
         this.reReviewCompleted = true;
         this.status = SwapRequestStatus.RE_REVIEW_COMPLETED;
         completeFinalValuation(finalCreditValue == null ? 1900 : finalCreditValue, List.of(
-                "재검수 결과: 기존 감정 기준이 유지되었습니다.",
-                "추가 확인: 고객 요청 사유를 반영해 외관과 부품 상태를 재확인했습니다.",
-                "확정 안내: 재검수는 1회만 가능하며, 해당 금액으로 크레딧을 받을 수 있습니다."
+                "Re-review completed.",
+                "The appliance condition was checked again.",
+                "The final amount is now ready for confirmation."
         ));
-        addNotification("재검수 완료", "재검수 결과를 확인해보세요.");
+        addNotification("Re-review complete", "Your re-review result is now ready.");
     }
 
     public void issueCredit() {
@@ -259,13 +335,42 @@ public class SwapRequestState {
         }
         this.creditStatus = "ISSUED";
         this.status = SwapRequestStatus.CREDIT_ISSUED;
-        this.trackingMessage = "ThinQ 크레딧이 발급되었어요.";
-        addTrackingEvent("CREDIT_ISSUED", "크레딧 발급");
-        addNotification("크레딧 발급 완료", "₹" + finalCreditValue + " 크레딧을 받았어요.");
+        this.trackingMessage = "ThinQ credit has been issued.";
+        addTrackingEvent("CREDIT_ISSUED", "Credit issued");
+        addNotification("Credit issued", finalCreditValue + " credits are now available.");
+    }
+
+    public void setProcessingCenter(String label, double lat, double lng) {
+        this.processingCenter = new SwapRequestResponse.LocationPoint(label, lat, lng);
+    }
+
+    public void setNearbyCrews(List<SwapRequestResponse.NearbyCrew> crews) {
+        this.nearbyCrews.clear();
+        if (crews != null) {
+            this.nearbyCrews.addAll(crews);
+        }
+    }
+
+    public void setDispatchContext(
+            int dispatchMatchScore,
+            int dispatchPriorityRank,
+            int crewRejectCount,
+            int crewCancelCount,
+            int crewPenaltyCount,
+            String dispatchAlertMessage,
+            String dispatchRecommendedReason
+    ) {
+        this.dispatchMatchScore = dispatchMatchScore;
+        this.dispatchPriorityRank = dispatchPriorityRank;
+        this.crewRejectCount = crewRejectCount;
+        this.crewCancelCount = crewCancelCount;
+        this.crewPenaltyCount = crewPenaltyCount;
+        this.dispatchAlertMessage = dispatchAlertMessage;
+        this.dispatchRecommendedReason = dispatchRecommendedReason;
     }
 
     public SwapRequestResponse toResponse() {
-        SwapRequestResponse.Booking booking = bookingDate == null
+        SwapRequestResponse.Booking booking = bookingDate == null && address == null && pickupLat == null && pickupLng == null
                 ? null
                 : new SwapRequestResponse.Booking(bookingDate, bookingTime, address, detailAddress, pickupLat, pickupLng);
         SwapRequestResponse.PickupRequest pickupRequest = pickupRequestId == null
@@ -277,7 +382,24 @@ public class SwapRequestState {
                 crewId,
                 crewName,
                 address,
-                scheduledLabel()
+                scheduledLabel(),
+                List.copyOf(nearbyCrews)
+        );
+        SwapRequestResponse.TrackingMetrics trackingMetrics = new SwapRequestResponse.TrackingMetrics(
+                calculateCrewToPickupDistanceMeters(),
+                calculateCrewToProcessingCenterDistanceMeters(),
+                isDriverLocationLive()
+        );
+        SwapRequestResponse.DispatchInfo dispatchInfo = pickupRequestId == null
+                ? null
+                : new SwapRequestResponse.DispatchInfo(
+                dispatchAlertMessage == null ? "Crew dispatch info will appear after pickup matching starts." : dispatchAlertMessage,
+                dispatchMatchScore,
+                dispatchPriorityRank,
+                crewRejectCount,
+                crewCancelCount,
+                crewPenaltyCount,
+                dispatchRecommendedReason == null ? "Nearby crew routing and live location are considered for priority dispatch." : dispatchRecommendedReason
         );
         SwapRequestResponse.FinalValuation finalValuation = finalValuationStatus == null
                 ? null
@@ -297,6 +419,16 @@ public class SwapRequestState {
                 pickupResultSummary,
                 List.copyOf(pickupResultDetails)
         );
+        SwapRequestResponse.Settlement settlement = settlementStatus == null
+                ? null
+                : new SwapRequestResponse.Settlement(
+                settlementBaseFee,
+                settlementDistanceFee,
+                settlementIncentive,
+                settlementPenalty,
+                settlementTotalAmount,
+                settlementStatus
+        );
 
         return new SwapRequestResponse(
                 id,
@@ -313,34 +445,54 @@ public class SwapRequestState {
                         aiConfidence,
                         uploadedFileName
                 ),
+                new SwapRequestResponse.UserConsent(
+                        creditPolicyAgreed,
+                        "If intentional damage is found during pickup or inspection, legal or credit penalties may apply.",
+                        consentedAt
+                ),
+                new SwapRequestResponse.CaptureEvidence(
+                        exteriorPhotoFileName,
+                        labelPhotoFileName,
+                        pickupPhotoFileName,
+                        hubPhotoFileName,
+                        pickupInspectionMemo,
+                        hubMemo
+                ),
                 new SwapRequestResponse.PreValuation(
                         minEstimatedValue,
                         maxEstimatedValue,
                         "INR",
                         List.of(
-                                "제품군: " + applianceLabel(applianceType),
-                                "브랜드: " + brand,
-                                "외관 상태: " + exteriorCondition,
-                                "사진 기반 예상 범위이며 최종 금액은 수거 후 검수로 확정됩니다."
+                                "Product group: " + applianceLabel(applianceType),
+                                "Brand: " + brand,
+                                "Exterior condition: " + exteriorCondition,
+                                "Raw material recovery value and reuse potential were included.",
+                                "The final amount is confirmed after pickup and inspection."
                         )
                 ),
                 booking,
                 pickupRequest,
+                dispatchInfo,
                 new SwapRequestResponse.Tracking(
                         trackingMessage,
                         estimatedArrivalAt,
                         driverLocation,
+                        processingCenter,
+                        trackingPhase,
+                        trackingMetrics,
+                        List.copyOf(nearbyCrews),
                         List.copyOf(trackingEvents)
                 ),
                 finalValuation,
                 credit,
                 pickupResultReport,
                 new SwapRequestResponse.RecyclingReport(
-                        pickupResultSummary == null ? "수거 후 처리 결과가 생성될 예정입니다." : pickupResultSummary,
+                        pickupResultSummary == null ? "Pickup and processing results will appear here." : pickupResultSummary,
                         pickupResultDetails.isEmpty()
-                                ? List.of("재활용 가능 부품 선별", "금속/플라스틱 원자재 회수", "LG 순환 처리 프로세스")
+                                ? List.of("Reusable parts separated", "Materials sorted for recovery", "LG processing flow continued")
                                 : List.copyOf(pickupResultDetails)
                 ),
+                settlement,
                 List.copyOf(notifications)
         );
     }
@@ -354,18 +506,18 @@ public class SwapRequestState {
 
     private String scheduledLabel() {
         if (bookingDate == null || bookingTime == null) {
-            return "즉시 수거 요청";
+            return "Instant pickup request";
         }
         return bookingDate + " " + bookingTime;
     }
 
     private void createPickupResultReport() {
         this.pickupResultType = "MATERIAL_RECOVERED";
-        this.pickupResultSummary = "수거품 처리 결과가 생성되었어요.";
+        this.pickupResultSummary = "Pickup processing results are ready.";
         this.pickupResultDetails.clear();
-        this.pickupResultDetails.add("재사용 가능한 부품을 선별했습니다.");
-        this.pickupResultDetails.add("금속과 플라스틱 원자재 회수 대상으로 분류했습니다.");
-        this.pickupResultDetails.add("안전 해체 후 LG 순환 처리 프로세스로 이동합니다.");
+        this.pickupResultDetails.add("Reusable parts were separated.");
+        this.pickupResultDetails.add("Metal and plastic materials were sorted for recovery.");
+        this.pickupResultDetails.add("The appliance was moved into the LG processing flow.");
     }
 
     private void addTrackingEvent(String eventType, String message) {
@@ -374,6 +526,37 @@ public class SwapRequestState {
 
     private void addNotification(String title, String message) {
         notifications.add(new SwapRequestResponse.Notification(notificationSequence++, title, message, false, LocalDateTime.now()));
+    }
+
+    private Double calculateCrewToPickupDistanceMeters() {
+        if (driverLocation == null || pickupLat == null || pickupLng == null) {
+            return null;
+        }
+        return distanceMeters(driverLocation.lat(), driverLocation.lng(), pickupLat, pickupLng);
+    }
+
+    private Double calculateCrewToProcessingCenterDistanceMeters() {
+        if (driverLocation == null || processingCenter == null) {
+            return null;
+        }
+        return distanceMeters(driverLocation.lat(), driverLocation.lng(), processingCenter.lat(), processingCenter.lng());
+    }
+
+    private boolean isDriverLocationLive() {
+        return driverLocation != null
+                && driverLocation.updatedAt() != null
+                && driverLocation.updatedAt().isAfter(LocalDateTime.now().minusSeconds(30));
+    }
+
+    private double distanceMeters(double lat1, double lng1, double lat2, double lng2) {
+        double earthRadius = 6371000.0;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLng = Math.toRadians(lng2 - lng1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return Math.round(earthRadius * c * 10.0) / 10.0;
     }
 
     private static String valueOrDefault(String value, String fallback) {
@@ -392,11 +575,11 @@ public class SwapRequestState {
 
     private static String applianceLabel(String applianceType) {
         return switch (valueOrDefault(applianceType, "washing_machine")) {
-            case "refrigerator" -> "냉장고";
-            case "air_conditioner" -> "에어컨";
+            case "refrigerator" -> "Refrigerator";
+            case "air_conditioner" -> "Air conditioner";
             case "tv" -> "TV";
-            case "microwave" -> "전자레인지";
-            default -> "세탁기";
+            case "microwave" -> "Microwave";
+            default -> "Washing machine";
         };
     }
 }

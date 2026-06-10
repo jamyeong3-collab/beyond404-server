@@ -10,11 +10,16 @@ public class CorsConfig implements WebMvcConfigurer {
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
                 .allowedOriginPatterns(
-                        "http://localhost:3000",
-                        "http://127.0.0.1:3000",
-                        "http://172.*.*.*:3000",
-                        "http://192.168.*.*:3000",
-                        "http://10.*.*.*:3000"
+                        "http://localhost:*",
+                        "http://127.0.0.1:*",
+                        "http://172.*.*.*:*",
+                        "http://192.168.*.*:*",
+                        "http://10.*.*.*:*",
+                        "https://localhost:*",
+                        "https://127.0.0.1:*",
+                        "https://172.*.*.*:*",
+                        "https://192.168.*.*:*",
+                        "https://10.*.*.*:*"
                 )
                 .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                 .allowedHeaders("*");
