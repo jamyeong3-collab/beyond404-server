@@ -1,6 +1,12 @@
 package com.swapit.service;
 
 import com.swapit.domain.SwapRequestState;
+import com.swapit.domain.entity.ApplianceEntity;
+import com.swapit.domain.entity.ApplianceImageEntity;
+import com.swapit.domain.entity.SwapRequestEntity;
+import com.swapit.domain.entity.UserEntity;
+import com.swapit.domain.entity.ValuationEntity;
+import com.swapit.domain.enums.SwapRequestStatus;
 import com.swapit.dto.BookingRequest;
 import com.swapit.dto.CrewCompletePickupRequest;
 import com.swapit.dto.CrewLocationRequest;
@@ -12,7 +18,14 @@ import com.swapit.dto.ReReviewRequest;
 import com.swapit.dto.SelectReplacementProductRequest;
 import com.swapit.dto.SwapRequestResponse;
 import com.swapit.dto.UpdateApplianceRequest;
+import com.swapit.repository.ApplianceImageRepository;
+import com.swapit.repository.ApplianceRepository;
+import com.swapit.repository.SwapRequestRepository;
+import com.swapit.repository.UserRepository;
+import com.swapit.repository.ValuationRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
 import java.util.List;
@@ -22,6 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Service
+@RequiredArgsConstructor
 public class SwapRequestService {
     private static final long DEMO_CUSTOMER_ID = 1L;
     private static final long DEMO_CREW_ID = 101L;
@@ -32,6 +46,12 @@ public class SwapRequestService {
             "친절하게 수거 진행",
             "시간 약속을 잘 지켜요"
     );
+
+    private final UserRepository userRepository;
+    private final SwapRequestRepository swapRequestRepository;
+    private final ApplianceRepository applianceRepository;
+    private final ApplianceImageRepository applianceImageRepository;
+    private final ValuationRepository valuationRepository;
 
     private final AtomicLong sequence = new AtomicLong(1);
     private final Map<Long, SwapRequestState> store = new ConcurrentHashMap<>();
@@ -45,13 +65,14 @@ public class SwapRequestService {
         resetCrewGpsStore();
     }
 
+    @Transactional
     public SwapRequestResponse create(CreateSwapRequestRequest request) {
-        long id = sequence.getAndIncrement();
-        SwapRequestState state = new SwapRequestState(id, DEMO_CUSTOMER_ID, request.applianceType());
-        store.put(id, state);
+        SwapRequestState state = createPersistentState(request);
+        store.put(state.getId(), state);
         return state.toResponse();
     }
 
+    @Transactional
     public SwapRequestResponse analyzePhoto(long id, PhotoUploadRequest request) {
         SwapRequestState state = findState(id);
         state.applyMockInspection(
@@ -62,6 +83,8 @@ public class SwapRequestService {
                 request.labelPhotoFileName(),
                 request.agreedToCreditPolicy()
         );
+        state.applyMockInspection(request.fileName(), request.applianceType(), request.imageUrl());
+        persistMockInspection(id, request);
         return state.toResponse();
     }
 
@@ -359,6 +382,76 @@ public class SwapRequestService {
         );
     }
 
+    private void persistMockInspection(long id, PhotoUploadRequest request) {
+        SwapRequestEntity swapRequest = swapRequestRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("Swap request not found in DB: " + id));
+        String applianceType = valueOrDefault(request.applianceType(), swapRequest.getApplianceType());
+        String modelName = mockModelName(applianceType);
+
+        ApplianceEntity appliance = applianceRepository.findBySwapRequest_Id(id)
+                .orElseGet(() -> applianceRepository.save(ApplianceEntity.create(swapRequest, applianceType)));
+        appliance.applyMockInspection(applianceType, "LG", modelName, "1~3년", "사용 흔적 있음");
+        applianceRepository.save(appliance);
+
+        applianceImageRepository.save(ApplianceImageEntity.customerCapture(
+                swapRequest,
+                appliance,
+                request.fileName(),
+                request.imageUrl()
+        ));
+
+        valuationRepository.save(ValuationEntity.preValuation(
+                swapRequest,
+                1500,
+                2400,
+                "사진 기반 Mock VLM 분석 결과로 산정된 예상 보상가입니다."
+        ));
+        swapRequest.changeStatus(SwapRequestStatus.PRE_VALUATION_READY.name());
+        swapRequestRepository.save(swapRequest);
+    }
+
+    private static String mockModelName(String applianceType) {
+        return switch (valueOrDefault(applianceType, "washing_machine")) {
+            case "refrigerator" -> "GL-T422VPZX";
+            case "air_conditioner" -> "US-Q19BNZE3";
+            case "tv" -> "OLED55C4";
+            case "microwave" -> "MH8265DIS";
+            default -> "FHP1411Z9P";
+        };
+    }
+    private SwapRequestState createPersistentState(CreateSwapRequestRequest request) {
+        String applianceType = valueOrDefault(request.applianceType(), "washing_machine");
+
+        UserEntity user = findOrCreateUser(request);
+        UserEntity savedUser = userRepository.save(user);
+
+        SwapRequestEntity swapRequest = SwapRequestEntity.create(
+                savedUser,
+                applianceType,
+                SwapRequestStatus.CREATED.name()
+        );
+        SwapRequestEntity savedSwapRequest = swapRequestRepository.save(swapRequest);
+        applianceRepository.save(ApplianceEntity.create(savedSwapRequest, applianceType));
+
+        return new SwapRequestState(savedSwapRequest.getId(), savedUser.getId(), applianceType);
+    }
+
+    private UserEntity findOrCreateUser(CreateSwapRequestRequest request) {
+        if (request.userId() != null) {
+            UserEntity user = userRepository.findById(request.userId())
+                    .orElseThrow(() -> new NoSuchElementException("User not found: " + request.userId()));
+            user.updateProfile(request.userName(), request.phoneNumber());
+            return user;
+        }
+
+        String thinqUserKey = UserService.toThinqUserKey(request.phoneNumber(), request.userName());
+        return userRepository.findByThinqUserKey(thinqUserKey)
+                .map(existingUser -> {
+                    existingUser.updateProfile(request.userName(), request.phoneNumber());
+                    return existingUser;
+                })
+                .orElseGet(() -> UserEntity.create(thinqUserKey, request.userName(), request.phoneNumber()));
+    }
     private SwapRequestState findState(long id) {
         SwapRequestState state = store.get(id);
         if (state == null) {
