@@ -23,6 +23,7 @@ import com.swapit.repository.ApplianceRepository;
 import com.swapit.repository.SwapRequestRepository;
 import com.swapit.repository.UserRepository;
 import com.swapit.repository.ValuationRepository;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,7 +62,8 @@ public class SwapRequestService {
             new SwapRequestResponse.LocationPoint("서울 동부 e-waste 허브", 37.5457, 127.1427)
     );
 
-    public SwapRequestService() {
+    @PostConstruct
+    void initializeDemoCrewGps() {
         resetCrewGpsStore();
     }
 
@@ -83,7 +85,6 @@ public class SwapRequestService {
                 request.labelPhotoFileName(),
                 request.agreedToCreditPolicy()
         );
-        state.applyMockInspection(request.fileName(), request.applianceType(), request.imageUrl());
         persistMockInspection(id, request);
         return state.toResponse();
     }
