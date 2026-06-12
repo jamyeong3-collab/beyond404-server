@@ -64,4 +64,12 @@ public class ApplianceImageEntity {
     ) {
         return new ApplianceImageEntity(swapRequest, appliance, fileName, imageUrl);
     }
+
+    public String getFileName() {
+        return fileName;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
 }

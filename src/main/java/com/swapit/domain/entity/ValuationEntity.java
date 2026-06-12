@@ -84,4 +84,12 @@ public class ValuationEntity {
     public static ValuationEntity preValuation(SwapRequestEntity swapRequest, int minAmount, int maxAmount, String summaryReason) {
         return new ValuationEntity(swapRequest, minAmount, maxAmount, summaryReason);
     }
+
+    public Integer getMinAmount() {
+        return minAmount;
+    }
+
+    public Integer getMaxAmount() {
+        return maxAmount;
+    }
 }

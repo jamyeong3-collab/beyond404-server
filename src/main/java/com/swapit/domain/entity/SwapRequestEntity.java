@@ -74,4 +74,8 @@ public class SwapRequestEntity {
     public String getApplianceType() {
         return applianceType;
     }
+
+    public String getStatus() {
+        return status;
+    }
 }

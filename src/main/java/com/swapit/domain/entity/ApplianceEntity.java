@@ -100,4 +100,20 @@ public class ApplianceEntity {
     public String getApplianceType() {
         return applianceType;
     }
+
+    public String getBrand() {
+        return brand;
+    }
+
+    public String getModelName() {
+        return modelName;
+    }
+
+    public String getEstimatedAge() {
+        return estimatedAge;
+    }
+
+    public String getExteriorCondition() {
+        return exteriorCondition;
+    }
 }

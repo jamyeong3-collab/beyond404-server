@@ -11,12 +11,14 @@ import com.swapit.dto.UpdateApplianceRequest;
 import com.swapit.service.SwapRequestService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -28,6 +30,13 @@ public class SwapRequestController {
     @PostMapping
     public SwapRequestResponse create(@Valid @RequestBody CreateSwapRequestRequest request) {
         return swapRequestService.create(request);
+    }
+
+    @GetMapping("/latest")
+    public ResponseEntity<SwapRequestResponse> getLatestByUser(@RequestParam long userId) {
+        return swapRequestService.getLatestByUser(userId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PostMapping("/{id}/photos")

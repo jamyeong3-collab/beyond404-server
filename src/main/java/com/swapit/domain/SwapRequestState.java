@@ -276,6 +276,68 @@ public class SwapRequestState {
         addNotification("바로콜 요청", "근처 수거 크루를 찾고 있습니다.");
     }
 
+    public void restorePickup(
+            Long pickupRequestId,
+            String pickupType,
+            String pickupStatus,
+            Long crewId,
+            String crewName,
+            LocalDate bookingDate,
+            String bookingTime,
+            LocalDateTime pickupRequestedAt,
+            String address,
+            String detailAddress,
+            Double pickupLat,
+            Double pickupLng
+    ) {
+        this.pickupRequestId = pickupRequestId;
+        this.pickupType = pickupType;
+        this.pickupStatus = pickupStatus;
+        this.crewId = crewId;
+        this.crewName = crewName;
+        this.bookingDate = bookingDate;
+        this.bookingTime = bookingTime;
+        this.pickupRequestedAt = pickupRequestedAt;
+        this.address = address;
+        this.detailAddress = detailAddress;
+        this.pickupLat = pickupLat;
+        this.pickupLng = pickupLng;
+
+        if ("BOOKING".equals(pickupType) && "CONFIRMED".equals(pickupStatus)) {
+            this.status = SwapRequestStatus.BOOKING_CONFIRMED;
+            this.trackingPhase = "SEARCHING_NEARBY_CREW";
+            this.trackingMessage = "예약이 접수되었습니다. 근처 수거 크루를 배정하고 있습니다.";
+            return;
+        }
+
+        if ("REQUESTED".equals(pickupStatus)) {
+            this.status = SwapRequestStatus.INSTANT_CALL_REQUESTED;
+            this.trackingPhase = "SEARCHING_NEARBY_CREW";
+            this.trackingMessage = "바로콜 요청이 접수되었습니다. 근처 수거 크루를 찾는 중입니다.";
+            return;
+        }
+
+        if ("ASSIGNED".equals(pickupStatus)) {
+            this.status = SwapRequestStatus.CREW_ASSIGNED;
+            this.trackingPhase = "CREW_ASSIGNED";
+            this.trackingMessage = valueOrDefault(crewName, "LG 수거 크루") + " 크루가 배정되었습니다.";
+            return;
+        }
+
+        if ("IN_PROGRESS".equals(pickupStatus)) {
+            this.status = SwapRequestStatus.PICKUP_IN_PROGRESS;
+            this.trackingPhase = "EN_ROUTE_TO_PICKUP";
+            this.trackingMessage = "크루가 수거지로 이동 중입니다.";
+            return;
+        }
+
+        if ("COMPLETED".equals(pickupStatus)) {
+            this.status = SwapRequestStatus.REWARD_READY;
+            this.trackingPhase = "DELIVERED_TO_EWASTE_HUB";
+            this.trackingMessage = "수거가 완료되어 최종 보상 확인을 준비 중입니다.";
+        }
+    }
+
     public void acceptByCrew(long crewId, String crewName, String photoUrl, double rating, List<String> reviewSummary) {
         this.pickupRequestId = ensurePickupRequestId();
         this.crewId = crewId;
