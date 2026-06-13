@@ -20,6 +20,12 @@ public class UserEntity {
     @Column(name = "thinq_user_key", nullable = false, unique = true, length = 100)
     private String thinqUserKey;
 
+    @Column(name = "login_id", unique = true, length = 50)
+    private String loginId;
+
+    @Column(name = "password_hash", length = 100)
+    private String passwordHash;
+
     @Column(name = "name", nullable = false, length = 50)
     private String name;
 
@@ -48,6 +54,19 @@ public class UserEntity {
         return new UserEntity(thinqUserKey, name, phoneNumber);
     }
 
+    public static UserEntity createWithCredentials(
+            String loginId,
+            String passwordHash,
+            String thinqUserKey,
+            String name,
+            String phoneNumber
+    ) {
+        UserEntity user = new UserEntity(thinqUserKey, name, phoneNumber);
+        user.loginId = loginId;
+        user.passwordHash = passwordHash;
+        return user;
+    }
+
     public void updateProfile(String name, String phoneNumber) {
         this.name = name;
         this.phoneNumber = phoneNumber;
@@ -68,5 +87,13 @@ public class UserEntity {
 
     public String getThinqUserKey() {
         return thinqUserKey;
+    }
+
+    public String getLoginId() {
+        return loginId;
+    }
+
+    public String getPasswordHash() {
+        return passwordHash;
     }
 }

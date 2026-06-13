@@ -539,20 +539,21 @@ public class SwapRequestService {
     }
 
     private UserEntity findOrCreateUser(CreateSwapRequestRequest request) {
+        String phoneNumber = UserService.formatPhoneNumber(request.phoneNumber());
         if (request.userId() != null) {
             UserEntity user = userRepository.findById(request.userId())
                     .orElseThrow(() -> new NoSuchElementException("User not found: " + request.userId()));
-            user.updateProfile(request.userName(), request.phoneNumber());
+            user.updateProfile(request.userName(), phoneNumber);
             return user;
         }
 
-        String thinqUserKey = UserService.toThinqUserKey(request.phoneNumber(), request.userName());
+        String thinqUserKey = UserService.toThinqUserKey(phoneNumber, request.userName());
         return userRepository.findByThinqUserKey(thinqUserKey)
                 .map(existingUser -> {
-                    existingUser.updateProfile(request.userName(), request.phoneNumber());
+                    existingUser.updateProfile(request.userName(), phoneNumber);
                     return existingUser;
                 })
-                .orElseGet(() -> UserEntity.create(thinqUserKey, request.userName(), request.phoneNumber()));
+                .orElseGet(() -> UserEntity.create(thinqUserKey, request.userName(), phoneNumber));
     }
     private SwapRequestState findState(long id) {
         SwapRequestState state = store.get(id);
