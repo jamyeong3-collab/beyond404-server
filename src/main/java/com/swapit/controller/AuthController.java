@@ -2,6 +2,7 @@ package com.swapit.controller;
 
 import com.swapit.dto.DemoLoginRequest;
 import com.swapit.dto.DemoLoginResponse;
+import com.swapit.dto.FirebaseLoginRequest;
 import com.swapit.dto.LoginIdCheckResponse;
 import com.swapit.dto.LoginRequest;
 import com.swapit.dto.SignupRequest;
@@ -39,5 +40,10 @@ public class AuthController {
     @PostMapping("/login")
     public DemoLoginResponse login(@Valid @RequestBody LoginRequest request) {
         return userService.login(request);
+    }
+
+    @PostMapping("/firebase-login")
+    public DemoLoginResponse firebaseLogin(@Valid @RequestBody FirebaseLoginRequest request) {
+        return userService.firebaseLogin(request);
     }
 }

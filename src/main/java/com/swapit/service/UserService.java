@@ -3,6 +3,7 @@ package com.swapit.service;
 import com.swapit.domain.entity.UserEntity;
 import com.swapit.dto.DemoLoginRequest;
 import com.swapit.dto.DemoLoginResponse;
+import com.swapit.dto.FirebaseLoginRequest;
 import com.swapit.dto.LoginIdCheckResponse;
 import com.swapit.dto.LoginRequest;
 import com.swapit.dto.SignupRequest;
@@ -19,6 +20,8 @@ import java.util.Locale;
 @Service
 @RequiredArgsConstructor
 public class UserService {
+    private static final String DUPLICATE_PHONE_MESSAGE = "이미 가입된 전화번호입니다. 로그인 화면에서 로그인해주세요.";
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
 
@@ -27,6 +30,7 @@ public class UserService {
         String phoneNumber = formatPhoneNumber(request.phoneNumber());
         String thinqUserKey = toThinqUserKey(phoneNumber, request.userName());
         UserEntity user = userRepository.findByThinqUserKey(thinqUserKey)
+                .or(() -> userRepository.findByPhoneNumber(phoneNumber))
                 .map(existingUser -> {
                     existingUser.updateProfile(request.userName(), phoneNumber);
                     return existingUser;
@@ -58,6 +62,8 @@ public class UserService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 사용 중인 아이디입니다.");
         }
 
+        assertPhoneNumberAvailableForNewUser(phoneNumber);
+
         String passwordHash = passwordEncoder.encode(request.password());
         String thinqUserKey = "login:" + loginId.toLowerCase(Locale.ROOT);
         UserEntity user = UserEntity.createWithCredentials(
@@ -82,6 +88,40 @@ public class UserService {
         }
 
         return toResponse(user);
+    }
+
+    @Transactional
+    public DemoLoginResponse firebaseLogin(FirebaseLoginRequest request) {
+        if (!request.emailVerified()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Email verification is required.");
+        }
+
+        String email = normalizeEmail(request.email());
+        String phoneNumber = formatPhoneNumber(request.phoneNumber());
+        String userName = request.userName() == null || request.userName().isBlank()
+                ? email.substring(0, email.indexOf("@"))
+                : request.userName().trim();
+
+        UserEntity user = userRepository.findByFirebaseUid(request.firebaseUid())
+                .or(() -> userRepository.findByEmailIgnoreCase(email))
+                .map(existingUser -> {
+                    assertPhoneNumberAvailableFor(existingUser, phoneNumber);
+                    existingUser.updateFirebaseProfile(email, true, userName, phoneNumber);
+                    return existingUser;
+                })
+                .orElseGet(() -> {
+                    assertPhoneNumberAvailableForNewUser(phoneNumber);
+                    return UserEntity.createWithFirebase(
+                            request.firebaseUid(),
+                            email,
+                            true,
+                            "firebase:" + request.firebaseUid(),
+                            userName,
+                            phoneNumber
+                    );
+                });
+
+        return toResponse(userRepository.save(user));
     }
 
     public static String toThinqUserKey(String phoneNumber, String userName) {
@@ -110,10 +150,34 @@ public class UserService {
         return loginId == null ? "" : loginId.trim();
     }
 
+    private static String normalizeEmail(String email) {
+        return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private void assertPhoneNumberAvailableForNewUser(String phoneNumber) {
+        if (!phoneNumber.isBlank() && userRepository.existsByPhoneNumber(phoneNumber)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, DUPLICATE_PHONE_MESSAGE);
+        }
+    }
+
+    private void assertPhoneNumberAvailableFor(UserEntity currentUser, String phoneNumber) {
+        if (phoneNumber.isBlank()) {
+            return;
+        }
+
+        userRepository.findByPhoneNumber(phoneNumber)
+                .filter(existingUser -> !existingUser.getId().equals(currentUser.getId()))
+                .ifPresent(existingUser -> {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, DUPLICATE_PHONE_MESSAGE);
+                });
+    }
+
     private DemoLoginResponse toResponse(UserEntity user) {
         return new DemoLoginResponse(
                 user.getId(),
                 user.getLoginId(),
+                user.getEmail(),
+                user.isEmailVerified(),
                 user.getName(),
                 user.getPhoneNumber(),
                 user.getThinqUserKey()

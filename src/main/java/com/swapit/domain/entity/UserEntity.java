@@ -26,10 +26,19 @@ public class UserEntity {
     @Column(name = "password_hash", length = 100)
     private String passwordHash;
 
+    @Column(name = "firebase_uid", unique = true, length = 128)
+    private String firebaseUid;
+
+    @Column(name = "email", unique = true, length = 120)
+    private String email;
+
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
+
     @Column(name = "name", nullable = false, length = 50)
     private String name;
 
-    @Column(name = "phone_number", length = 30)
+    @Column(name = "phone_number", unique = true, length = 30)
     private String phoneNumber;
 
     @Column(name = "created_at", nullable = false)
@@ -67,10 +76,33 @@ public class UserEntity {
         return user;
     }
 
+    public static UserEntity createWithFirebase(
+            String firebaseUid,
+            String email,
+            boolean emailVerified,
+            String thinqUserKey,
+            String name,
+            String phoneNumber
+    ) {
+        UserEntity user = new UserEntity(thinqUserKey, name, phoneNumber);
+        user.firebaseUid = firebaseUid;
+        user.email = email;
+        user.emailVerified = emailVerified;
+        user.loginId = email;
+        return user;
+    }
+
     public void updateProfile(String name, String phoneNumber) {
         this.name = name;
         this.phoneNumber = phoneNumber;
         this.updatedAt = OffsetDateTime.now();
+    }
+
+    public void updateFirebaseProfile(String email, boolean emailVerified, String name, String phoneNumber) {
+        this.email = email;
+        this.emailVerified = emailVerified;
+        this.loginId = email;
+        updateProfile(name, phoneNumber);
     }
 
     public Long getId() {
@@ -95,5 +127,17 @@ public class UserEntity {
 
     public String getPasswordHash() {
         return passwordHash;
+    }
+
+    public String getFirebaseUid() {
+        return firebaseUid;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public boolean isEmailVerified() {
+        return emailVerified;
     }
 }
