@@ -9,6 +9,7 @@ import com.swapit.domain.entity.UserEntity;
 import com.swapit.domain.entity.ValuationEntity;
 import com.swapit.domain.enums.SwapRequestStatus;
 import com.swapit.dto.BookingRequest;
+import com.swapit.dto.BookingAvailabilityResponse;
 import com.swapit.dto.CrewCompletePickupRequest;
 import com.swapit.dto.CrewLocationRequest;
 import com.swapit.dto.CreateSwapRequestRequest;
@@ -35,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -42,6 +44,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -72,6 +75,11 @@ public class SwapRequestService {
     private final List<SwapRequestResponse.LocationPoint> processingCenters = List.of(
             new SwapRequestResponse.LocationPoint("서울 서부 e-waste 허브", 37.5481, 126.8914),
             new SwapRequestResponse.LocationPoint("서울 동부 e-waste 허브", 37.5457, 127.1427)
+    );
+    private final List<String> bookingTimeSlots = List.of(
+            "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
+            "12:00", "12:30", "13:00", "13:30", "14:00", "14:30",
+            "15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00"
     );
 
     @PostConstruct
@@ -152,6 +160,36 @@ public class SwapRequestService {
         if (price >= 1_500_000) return "프리미엄";
         if (price >= 500_000) return "일반";
         return "보급형";
+    }
+    @Transactional(readOnly = true)
+    public BookingAvailabilityResponse getBookingAvailability(LocalDate date) {
+        int slotCapacity = 1;
+        List<PickupRequestEntity> reservations = pickupRequestRepository.findByPickupTypeAndBookingDateAndStatusIn(
+                "BOOKING",
+                date,
+                List.of("CONFIRMED", "ASSIGNED", "IN_PROGRESS", "ARRIVED")
+        );
+
+        Map<String, Long> reservedCountsByTime = reservations.stream()
+                .filter(reservation -> reservation.getBookingTime() != null)
+                .collect(Collectors.groupingBy(
+                        PickupRequestEntity::getBookingTime,
+                        Collectors.counting()
+                ));
+
+        List<BookingAvailabilityResponse.Slot> slots = bookingTimeSlots.stream()
+                .map(time -> {
+                    int reservedCount = reservedCountsByTime.getOrDefault(time, 0L).intValue();
+                    return new BookingAvailabilityResponse.Slot(
+                            time,
+                            reservedCount < slotCapacity,
+                            reservedCount,
+                            slotCapacity
+                    );
+                })
+                .toList();
+
+        return new BookingAvailabilityResponse(date, slots);
     }
 
     @Transactional
@@ -283,6 +321,22 @@ public class SwapRequestService {
     @Transactional(readOnly = true)
     public List<SwapRequestResponse> getAvailableCalls() {
         return pickupRequestRepository.findByStatusInOrderByCreatedAtDesc(List.of("REQUESTED", "CONFIRMED")).stream()
+                .map(PickupRequestEntity::getSwapRequest)
+                .map(this::restoreAndRespond)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<SwapRequestResponse> getPendingCalls() {
+        return pickupRequestRepository.findByStatusInOrderByCreatedAtDesc(List.of("REQUESTED", "CONFIRMED")).stream()
+                .map(PickupRequestEntity::getSwapRequest)
+                .map(this::restoreAndRespond)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<SwapRequestResponse> getActiveCalls() {
+        return pickupRequestRepository.findByStatusInOrderByCreatedAtDesc(List.of("ASSIGNED", "IN_PROGRESS", "ARRIVED")).stream()
                 .map(PickupRequestEntity::getSwapRequest)
                 .map(this::restoreAndRespond)
                 .toList();
