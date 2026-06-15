@@ -44,7 +44,7 @@ public class UserService {
     public LoginIdCheckResponse checkLoginId(String loginId) {
         String normalizedLoginId = normalizeLoginId(loginId);
         if (normalizedLoginId.length() < 4) {
-            return new LoginIdCheckResponse(false, "아이디는 4자 이상 입력해 주세요.");
+            return new LoginIdCheckResponse(false, "아이디는 4자 이상 입력해주세요.");
         }
 
         boolean available = !userRepository.existsByLoginIdIgnoreCase(normalizedLoginId);
@@ -93,7 +93,7 @@ public class UserService {
     @Transactional
     public DemoLoginResponse firebaseLogin(FirebaseLoginRequest request) {
         if (!request.emailVerified()) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Email verification is required.");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "이메일 인증이 완료된 계정만 로그인할 수 있습니다.");
         }
 
         String email = normalizeEmail(request.email());
@@ -105,12 +105,19 @@ public class UserService {
         UserEntity user = userRepository.findByFirebaseUid(request.firebaseUid())
                 .or(() -> userRepository.findByEmailIgnoreCase(email))
                 .map(existingUser -> {
-                    assertPhoneNumberAvailableFor(existingUser, phoneNumber);
-                    existingUser.updateFirebaseProfile(email, true, userName, phoneNumber);
+                    String nextName = userName.isBlank() ? existingUser.getName() : userName;
+                    String nextPhoneNumber = phoneNumber.isBlank() ? blankIfNull(existingUser.getPhoneNumber()) : phoneNumber;
+                    assertPhoneNumberAvailableFor(existingUser, nextPhoneNumber);
+                    existingUser.updateFirebaseProfile(email, true, nextName, nextPhoneNumber);
                     return existingUser;
                 })
                 .orElseGet(() -> {
+                    /*
+                    if (phoneNumber.isBlank()) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "회원가입을 먼저 완료해주세요. 전화번호 확인 후 이메일 인증을 진행해야 합니다.");
+                    }
                     assertPhoneNumberAvailableForNewUser(phoneNumber);
+                    */
                     return UserEntity.createWithFirebase(
                             request.firebaseUid(),
                             email,
@@ -152,6 +159,10 @@ public class UserService {
 
     private static String normalizeEmail(String email) {
         return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static String blankIfNull(String value) {
+        return value == null ? "" : value;
     }
 
     private void assertPhoneNumberAvailableForNewUser(String phoneNumber) {
