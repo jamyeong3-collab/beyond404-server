@@ -106,7 +106,7 @@ public class UserService {
                 .or(() -> userRepository.findByEmailIgnoreCase(email))
                 .map(existingUser -> {
                     String nextName = userName.isBlank() ? existingUser.getName() : userName;
-                    String nextPhoneNumber = phoneNumber.isBlank() ? blankIfNull(existingUser.getPhoneNumber()) : phoneNumber;
+                    String nextPhoneNumber = phoneNumber == null ? existingUser.getPhoneNumber() : phoneNumber;
                     assertPhoneNumberAvailableFor(existingUser, nextPhoneNumber);
                     existingUser.updateFirebaseProfile(email, true, nextName, nextPhoneNumber);
                     return existingUser;
@@ -139,7 +139,12 @@ public class UserService {
 
     public static String formatPhoneNumber(String phoneNumber) {
         if (phoneNumber == null) {
-            return "";
+            return null;
+        }
+
+        String trimmed = phoneNumber.trim();
+        if (trimmed.isEmpty()) {
+            return null;
         }
 
         String digits = phoneNumber.replaceAll("[^0-9]", "");
@@ -150,7 +155,7 @@ public class UserService {
             return digits.substring(0, 3) + "-" + digits.substring(3, 6) + "-" + digits.substring(6);
         }
 
-        return phoneNumber.trim();
+        return trimmed;
     }
 
     private static String normalizeLoginId(String loginId) {
@@ -161,18 +166,14 @@ public class UserService {
         return email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
     }
 
-    private static String blankIfNull(String value) {
-        return value == null ? "" : value;
-    }
-
     private void assertPhoneNumberAvailableForNewUser(String phoneNumber) {
-        if (!phoneNumber.isBlank() && userRepository.existsByPhoneNumber(phoneNumber)) {
+        if (phoneNumber != null && !phoneNumber.isBlank() && userRepository.existsByPhoneNumber(phoneNumber)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, DUPLICATE_PHONE_MESSAGE);
         }
     }
 
     private void assertPhoneNumberAvailableFor(UserEntity currentUser, String phoneNumber) {
-        if (phoneNumber.isBlank()) {
+        if (phoneNumber == null || phoneNumber.isBlank()) {
             return;
         }
 
