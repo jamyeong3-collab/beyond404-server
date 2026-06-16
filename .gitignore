@@ -39,3 +39,4 @@ out/
 ### Local dev ###
 dev-server.log
 *.log
+.env.local
