@@ -6,6 +6,47 @@ param(
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $candidateHomes = New-Object System.Collections.Generic.List[string]
 
+function Import-DotEnvFile {
+    param([string]$Path)
+
+    if (-not (Test-Path $Path)) {
+        return
+    }
+
+    $loadedCount = 0
+    Get-Content -Path $Path | ForEach-Object {
+        $line = $_.Trim()
+        if ([string]::IsNullOrWhiteSpace($line) -or $line.StartsWith("#")) {
+            return
+        }
+
+        $separatorIndex = $line.IndexOf("=")
+        if ($separatorIndex -le 0) {
+            return
+        }
+
+        $name = $line.Substring(0, $separatorIndex).Trim()
+        $value = $line.Substring($separatorIndex + 1).Trim()
+
+        if ($value.Length -ge 2) {
+            $first = $value.Substring(0, 1)
+            $last = $value.Substring($value.Length - 1, 1)
+            if (($first -eq '"' -and $last -eq '"') -or ($first -eq "'" -and $last -eq "'")) {
+                $value = $value.Substring(1, $value.Length - 2)
+            }
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($name)) {
+            [Environment]::SetEnvironmentVariable($name, $value, "Process")
+            $loadedCount += 1
+        }
+    }
+
+    if ($loadedCount -gt 0) {
+        Write-Host "Loaded $loadedCount environment variable(s) from .env.local"
+    }
+}
+
 function Add-JavaCandidate {
     param([string]$Path)
 
@@ -41,6 +82,7 @@ if (-not $javaHome) {
 }
 
 $env:JAVA_HOME = $javaHome
+Import-DotEnvFile -Path (Join-Path $scriptDir ".env.local")
 
 Push-Location $scriptDir
 try {

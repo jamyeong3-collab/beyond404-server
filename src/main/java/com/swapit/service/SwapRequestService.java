@@ -355,6 +355,7 @@ public class SwapRequestService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
     public SwapRequestResponse getCrewCallDetail(long pickupRequestId) {
         SwapRequestState state = findByPickupRequestId(pickupRequestId);
         return buildResponse(state);
@@ -367,27 +368,35 @@ public class SwapRequestService {
     @Transactional
     public SwapRequestResponse acceptCall(long pickupRequestId) {
         SwapRequestState state = findByPickupRequestId(pickupRequestId);
-        PickupRequestEntity pickupRequest = pickupRequestRepository.findById(pickupRequestId)
-                .orElseThrow(() -> new IllegalArgumentException("Pickup request not found: " + pickupRequestId));
-        CrewGpsState assignedCrew = crewGpsStore.getOrDefault(DEMO_CREW_ID, new CrewGpsState(DEMO_CREW_ID, DEMO_CREW_NAME, 37.5665, 126.9780, "AVAILABLE"));
-        assignedCrew.status = "ASSIGNED";
-        state.acceptByCrew(DEMO_CREW_ID, assignedCrew.crewName, DEMO_CREW_PHOTO, DEMO_CREW_RATING, DEMO_CREW_REVIEW_SUMMARY);
-        state.updateCrewLocation(assignedCrew.lat, assignedCrew.lng, assignedCrew.heading, assignedCrew.speed);
-        pickupRequest.assignCrew(DEMO_CREW_ID, assignedCrew.crewName);
-        appendLocationHistory(pickupRequestId, assignedCrew.lat, assignedCrew.lng, assignedCrew.heading, assignedCrew.speed);
+        CrewGpsState assignedCrew = crewGpsStore.get(DEMO_CREW_ID);
+        String crewName = assignedCrew == null ? DEMO_CREW_NAME : assignedCrew.crewName;
+        state.acceptByCrew(DEMO_CREW_ID, crewName, DEMO_CREW_PHOTO, DEMO_CREW_RATING, DEMO_CREW_REVIEW_SUMMARY);
+        PickupRequestEntity pickupRequest = findPickupRequestEntity(pickupRequestId);
+        pickupRequest.assignCrew(DEMO_CREW_ID, crewName, null, null);
+        pickupRequestRepository.save(pickupRequest);
+        restorePickup(state, pickupRequest);
+
+        if (assignedCrew != null) {
+            assignedCrew.status = "ASSIGNED";
+            state.updateCrewLocation(assignedCrew.lat, assignedCrew.lng, assignedCrew.heading, assignedCrew.speed);
+            appendLocationHistory(pickupRequestId, assignedCrew.lat, assignedCrew.lng, assignedCrew.heading, assignedCrew.speed);
+        }
+
         return buildResponse(state);
     }
 
     @Transactional
     public SwapRequestResponse depart(long pickupRequestId) {
         SwapRequestState state = findByPickupRequestId(pickupRequestId);
-        PickupRequestEntity pickupRequest = pickupRequestRepository.findById(pickupRequestId)
-                .orElseThrow(() -> new IllegalArgumentException("Pickup request not found: " + pickupRequestId));
         state.departCrew();
-        pickupRequest.updateStatus("IN_PROGRESS");
+        PickupRequestEntity pickupRequest = findPickupRequestEntity(pickupRequestId);
+        pickupRequest.changeStatus("IN_PROGRESS");
+        pickupRequestRepository.save(pickupRequest);
+        restorePickup(state, pickupRequest);
         return buildResponse(state);
     }
 
+    @Transactional
     public SwapRequestResponse updateLocation(long pickupRequestId, CrewLocationRequest request) {
         SwapRequestState state = findByPickupRequestId(pickupRequestId);
         state.updateCrewLocation(
@@ -421,25 +430,27 @@ public class SwapRequestService {
     @Transactional
     public SwapRequestResponse arrive(long pickupRequestId) {
         SwapRequestState state = findByPickupRequestId(pickupRequestId);
-        PickupRequestEntity pickupRequest = pickupRequestRepository.findById(pickupRequestId)
-                .orElseThrow(() -> new IllegalArgumentException("Pickup request not found: " + pickupRequestId));
         state.arriveCrew();
-        pickupRequest.updateStatus("ARRIVED");
+        PickupRequestEntity pickupRequest = findPickupRequestEntity(pickupRequestId);
+        pickupRequest.changeStatus("ARRIVED");
+        pickupRequestRepository.save(pickupRequest);
+        restorePickup(state, pickupRequest);
         return buildResponse(state);
     }
 
     @Transactional
     public SwapRequestResponse completePickup(long pickupRequestId, CrewCompletePickupRequest request) {
         SwapRequestState state = findByPickupRequestId(pickupRequestId);
-        PickupRequestEntity pickupRequest = pickupRequestRepository.findById(pickupRequestId)
-                .orElseThrow(() -> new IllegalArgumentException("Pickup request not found: " + pickupRequestId));
         state.completePickup(
                 request.pickupPhotoFileName(),
                 request.hubPhotoFileName(),
                 request.inspectionMemo(),
                 request.hubMemo()
         );
-        pickupRequest.updateStatus("COMPLETED");
+        PickupRequestEntity pickupRequest = findPickupRequestEntity(pickupRequestId);
+        pickupRequest.changeStatus("COMPLETED");
+        pickupRequestRepository.save(pickupRequest);
+        restorePickup(state, pickupRequest);
 
         Long crewId = state.getCrewId() == null ? DEMO_CREW_ID : state.getCrewId();
         CrewGpsState crewState = crewGpsStore.get(crewId);
@@ -558,7 +569,9 @@ public class SwapRequestService {
         }
 
         SwapRequestResponse.RouteSummary computedRoute = googleRoutesService.computeDrivingRoute(origin, destination);
-        List<SwapRequestResponse.RoutePoint> mergedPoints = mergeHistoryWithRoute(history, computedRoute, destination);
+        if (computedRoute == null) {
+            return null;
+        }
 
         return new SwapRequestResponse.RouteSummary(
                 computedRoute.mode(),
@@ -567,7 +580,7 @@ public class SwapRequestService {
                 computedRoute.distanceLabel(),
                 computedRoute.durationLabel(),
                 computedRoute.encodedPolyline(),
-                mergedPoints,
+                computedRoute.points() == null ? List.of() : computedRoute.points(),
                 computedRoute.calculatedAt()
         );
     }
@@ -598,37 +611,6 @@ public class SwapRequestService {
         }
 
         return null;
-    }
-
-    private List<SwapRequestResponse.RoutePoint> mergeHistoryWithRoute(
-            List<SwapRequestResponse.LocationHistoryPoint> history,
-            SwapRequestResponse.RouteSummary route,
-            SwapRequestResponse.RoutePoint destination
-    ) {
-        List<SwapRequestResponse.RoutePoint> merged = new ArrayList<>();
-
-        for (SwapRequestResponse.LocationHistoryPoint point : history) {
-            merged.add(new SwapRequestResponse.RoutePoint(point.lat(), point.lng()));
-        }
-
-        if (route != null && route.points() != null) {
-            for (SwapRequestResponse.RoutePoint point : route.points()) {
-                if (merged.isEmpty() || !samePoint(merged.get(merged.size() - 1), point)) {
-                    merged.add(point);
-                }
-            }
-        }
-
-        if (destination != null && (merged.isEmpty() || !samePoint(merged.get(merged.size() - 1), destination))) {
-            merged.add(destination);
-        }
-
-        return merged;
-    }
-
-    private boolean samePoint(SwapRequestResponse.RoutePoint left, SwapRequestResponse.RoutePoint right) {
-        return Math.abs(left.lat() - right.lat()) < 0.00001
-                && Math.abs(left.lng() - right.lng()) < 0.00001;
     }
 
     private void appendLocationHistory(long pickupRequestId, double lat, double lng, double heading, double speed) {
@@ -902,20 +884,7 @@ public class SwapRequestService {
         }
 
         pickupRequestRepository.findFirstBySwapRequest_IdOrderByCreatedAtDesc(swapRequest.getId())
-                .ifPresent(pickupRequest -> state.restorePickup(
-                        pickupRequest.getId(),
-                        pickupRequest.getPickupType(),
-                        pickupRequest.getStatus(),
-                        pickupRequest.getCrewId(),
-                        pickupRequest.getCrewName(),
-                        pickupRequest.getBookingDate(),
-                        pickupRequest.getBookingTime(),
-                        toLocalDateTime(pickupRequest.getCreatedAt()),
-                        pickupRequest.getAddress(),
-                        pickupRequest.getDetailAddress(),
-                        pickupRequest.getPickupLat(),
-                        pickupRequest.getPickupLng()
-                ));
+                .ifPresent(pickupRequest -> restorePickup(state, pickupRequest));
 
         store.put(state.getId(), state);
         return state;
@@ -924,6 +893,28 @@ public class SwapRequestService {
     private SwapRequestEntity findSwapRequestEntity(long id) {
         return swapRequestRepository.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("Swap request not found in DB: " + id));
+    }
+
+    private PickupRequestEntity findPickupRequestEntity(long pickupRequestId) {
+        return pickupRequestRepository.findById(pickupRequestId)
+                .orElseThrow(() -> new NoSuchElementException("Pickup request not found: " + pickupRequestId));
+    }
+
+    private void restorePickup(SwapRequestState state, PickupRequestEntity pickupRequest) {
+        state.restorePickup(
+                pickupRequest.getId(),
+                pickupRequest.getPickupType(),
+                pickupRequest.getStatus(),
+                pickupRequest.getCrewId(),
+                pickupRequest.getCrewName(),
+                pickupRequest.getBookingDate(),
+                pickupRequest.getBookingTime(),
+                toLocalDateTime(pickupRequest.getCreatedAt()),
+                pickupRequest.getAddress(),
+                pickupRequest.getDetailAddress(),
+                pickupRequest.getPickupLat(),
+                pickupRequest.getPickupLng()
+        );
     }
 
     private java.time.LocalDateTime toLocalDateTime(java.time.OffsetDateTime value) {
@@ -970,9 +961,6 @@ public class SwapRequestService {
 
     private void resetCrewGpsStore() {
         crewGpsStore.clear();
-        crewGpsStore.put(101L, new CrewGpsState(101L, DEMO_CREW_NAME, 37.5665, 126.9780, "AVAILABLE"));
-        crewGpsStore.put(102L, new CrewGpsState(102L, "서교 크루", 37.5563, 126.9220, "AVAILABLE"));
-        crewGpsStore.put(103L, new CrewGpsState(103L, "강서 크루", 37.5585, 126.8321, "AVAILABLE"));
     }
 
     private static final class CrewGpsState {

@@ -102,6 +102,22 @@ public class PickupRequestEntity {
         this.pickupLng = pickupLng;
     }
 
+    public void assignCrew(Long crewId, String crewName, String crewPhone, Integer etaMinutes) {
+        this.crewId = crewId;
+        this.crewName = crewName;
+        this.crewPhone = crewPhone;
+        this.etaMinutes = etaMinutes;
+        this.status = "ASSIGNED";
+        this.matchedAt = OffsetDateTime.now();
+    }
+
+    public void changeStatus(String status) {
+        this.status = status;
+        if ("COMPLETED".equals(status)) {
+            this.completedAt = OffsetDateTime.now();
+        }
+    }
+
     public Long getId() {
         return id;
     }

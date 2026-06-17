@@ -43,8 +43,8 @@ public class GoogleRoutesService {
         }
 
         if (apiKey == null || apiKey.isBlank()) {
-            log.info("Google Routes API key is not configured. Falling back to straight-line route.");
-            return fallbackRoute(origin, destination);
+            log.info("Google Routes API key is not configured. Road route will not be drawn.");
+            return unavailableRoute(origin, destination);
         }
 
         try {
@@ -60,7 +60,7 @@ public class GoogleRoutesService {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 log.warn("Google Routes API failed with status {} and body {}", response.statusCode(), response.body());
-                return fallbackRoute(origin, destination);
+                return unavailableRoute(origin, destination);
             }
 
             JsonNode root = objectMapper.readTree(response.body());
@@ -70,14 +70,14 @@ public class GoogleRoutesService {
 
             if (routeNode == null || routeNode.isMissingNode()) {
                 log.warn("Google Routes API returned no routes for origin {} and destination {}", origin, destination);
-                return fallbackRoute(origin, destination);
+                return unavailableRoute(origin, destination);
             }
 
             double distanceMeters = routeNode.path("distanceMeters").asDouble(haversineMeters(origin, destination));
             long durationSeconds = parseDurationSeconds(routeNode.path("duration").asText());
             String encodedPolyline = routeNode.path("polyline").path("encodedPolyline").asText("");
             List<SwapRequestResponse.RoutePoint> points = encodedPolyline.isBlank()
-                    ? List.of(origin, destination)
+                    ? List.of()
                     : decodePolyline(encodedPolyline);
 
             return new SwapRequestResponse.RouteSummary(
@@ -94,12 +94,12 @@ public class GoogleRoutesService {
             if (error instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
-            log.warn("Failed to compute Google route. Falling back to straight-line route.", error);
-            return fallbackRoute(origin, destination);
+            log.warn("Failed to compute Google route. Road route will not be drawn.", error);
+            return unavailableRoute(origin, destination);
         }
     }
 
-    private SwapRequestResponse.RouteSummary fallbackRoute(
+    private SwapRequestResponse.RouteSummary unavailableRoute(
             SwapRequestResponse.RoutePoint origin,
             SwapRequestResponse.RoutePoint destination
     ) {
@@ -107,13 +107,13 @@ public class GoogleRoutesService {
         long durationSeconds = Math.max(60L, Math.round(distanceMeters / 7.2));
 
         return new SwapRequestResponse.RouteSummary(
-                "FALLBACK_DRIVE",
+                "ROUTE_UNAVAILABLE",
                 round(distanceMeters),
                 durationSeconds,
                 formatDistance(distanceMeters),
                 formatDuration(durationSeconds),
                 null,
-                List.of(origin, destination),
+                List.of(),
                 LocalDateTime.now()
         );
     }
@@ -220,7 +220,7 @@ public class GoogleRoutesService {
                     new Waypoint(new RouteLocation(new LatLng(destination.lat(), destination.lng()))),
                     "DRIVE",
                     "TRAFFIC_AWARE_OPTIMAL",
-                    "OVERVIEW",
+                    "HIGH_QUALITY",
                     "ENCODED_POLYLINE"
             );
         }

@@ -19,3 +19,4 @@ public interface PickupRequestRepository extends JpaRepository<PickupRequestEnti
             Collection<String> statuses
     );
 }
+
