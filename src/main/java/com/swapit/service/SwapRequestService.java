@@ -52,12 +52,12 @@ import java.util.stream.Collectors;
 public class SwapRequestService {
     private static final long DEMO_CUSTOMER_ID = 1L;
     private static final long DEMO_CREW_ID = 101L;
-    private static final String DEMO_CREW_NAME = "민준 크루";
+    private static final String DEMO_CREW_NAME = "誘쇱? ?щ（";
     private static final String DEMO_CREW_PHOTO = "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&q=80";
     private static final double DEMO_CREW_RATING = 4.9;
     private static final List<String> DEMO_CREW_REVIEW_SUMMARY = List.of(
-            "친절하게 수거 진행",
-            "시간 약속을 잘 지켜요"
+            "移쒖젅?섍쾶 ?섍굅 吏꾪뻾",
+            "?쒓컙 ?쎌냽????吏耳쒖슂"
     );
 
     private final UserRepository userRepository;
@@ -66,7 +66,7 @@ public class SwapRequestService {
     private final ApplianceImageRepository applianceImageRepository;
     private final ValuationRepository valuationRepository;
     private final ApplianceSpecsRepository applianceSpecsRepository;
-    private final GoogleRoutesService googleRoutesService;
+    private final KakaoDirectionsService kakaoDirectionsService;
     private final PickupRequestRepository pickupRequestRepository;
 
     private final AtomicLong sequence = new AtomicLong(1);
@@ -74,8 +74,8 @@ public class SwapRequestService {
     private final Map<Long, CrewGpsState> crewGpsStore = new ConcurrentHashMap<>();
     private final Map<Long, List<SwapRequestResponse.LocationHistoryPoint>> locationHistoryStore = new ConcurrentHashMap<>();
     private final List<SwapRequestResponse.LocationPoint> processingCenters = List.of(
-            new SwapRequestResponse.LocationPoint("서울 서부 e-waste 허브", 37.5481, 126.8914),
-            new SwapRequestResponse.LocationPoint("서울 동부 e-waste 허브", 37.5457, 127.1427)
+            new SwapRequestResponse.LocationPoint("?쒖슱 ?쒕? e-waste ?덈툕", 37.5481, 126.8914),
+            new SwapRequestResponse.LocationPoint("?쒖슱 ?숇? e-waste ?덈툕", 37.5457, 127.1427)
     );
     private final List<String> bookingTimeSlots = List.of(
             "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
@@ -470,10 +470,10 @@ public class SwapRequestService {
         state.completeFinalValuation(
                 request.amount(),
                 List.of(
-                        valueOrDefault(request.exteriorReason(), "외관 상태를 확인했습니다."),
-                        valueOrDefault(request.partsReason(), "재사용 부품 가능성을 확인했습니다."),
-                        valueOrDefault(request.materialReason(), "소재 회수 가치를 반영했습니다."),
-                        valueOrDefault(request.processingReason(), "수거 및 처리 비용을 반영했습니다.")
+                        valueOrDefault(request.exteriorReason(), "?멸? ?곹깭瑜??뺤씤?덉뒿?덈떎."),
+                        valueOrDefault(request.partsReason(), "?ъ궗??遺??媛?μ꽦???뺤씤?덉뒿?덈떎."),
+                        valueOrDefault(request.materialReason(), "?뚯옱 ?뚯닔 媛移섎? 諛섏쁺?덉뒿?덈떎."),
+                        valueOrDefault(request.processingReason(), "?섍굅 諛?泥섎━ 鍮꾩슜??諛섏쁺?덉뒿?덈떎.")
                 )
         );
         return buildResponse(state);
@@ -572,7 +572,7 @@ public class SwapRequestService {
             return null;
         }
 
-        SwapRequestResponse.RouteSummary computedRoute = googleRoutesService.computeDrivingRoute(origin, destination);
+        SwapRequestResponse.RouteSummary computedRoute = kakaoDirectionsService.computeDrivingRoute(origin, destination);
         if (computedRoute == null) {
             return null;
         }
@@ -692,16 +692,16 @@ public class SwapRequestService {
         double baseDistance = topCrew == null ? 1800.0 : topCrew.distanceMeters();
         int matchScore = (int) Math.max(52, Math.min(97, Math.round(96 - (baseDistance / 120.0))));
         String dispatchAlertMessage = switch (valueOrDefault(state.getPickupStatus(), "")) {
-            case "REQUESTED", "CONFIRMED" -> "매칭 점수가 높은 크루에게 우선 배차 알림을 발송했습니다.";
-            case "ASSIGNED" -> "배정된 크루가 사용자 앱에 실시간 위치를 공유하고 있습니다.";
-            case "IN_PROGRESS" -> "크루가 수거지로 이동 중이며 실시간 위치가 갱신되고 있습니다.";
-            case "ARRIVED" -> "수거 후 e-waste 공장 이동 준비가 진행 중입니다.";
-            case "COMPLETED" -> "e-waste 공장 전달이 완료되었습니다.";
-            default -> "예약 또는 바로콜 접수 후 배차 정보가 표시됩니다.";
+            case "REQUESTED", "CONFIRMED" -> "留ㅼ묶 ?먯닔媛 ?믪? ?щ（?먭쾶 ?곗꽑 諛곗감 ?뚮┝??諛쒖넚?덉뒿?덈떎.";
+            case "ASSIGNED" -> "諛곗젙???щ（媛 ?ъ슜???깆뿉 ?ㅼ떆媛??꾩튂瑜?怨듭쑀?섍퀬 ?덉뒿?덈떎.";
+            case "IN_PROGRESS" -> "?щ（媛 ?섍굅吏濡??대룞 以묒씠硫??ㅼ떆媛??꾩튂媛 媛깆떊?섍퀬 ?덉뒿?덈떎.";
+            case "ARRIVED" -> "?섍굅 ??e-waste 怨듭옣 ?대룞 以鍮꾧? 吏꾪뻾 以묒엯?덈떎.";
+            case "COMPLETED" -> "e-waste 怨듭옣 ?꾨떖???꾨즺?섏뿀?듬땲??";
+            default -> "?덉빟 ?먮뒗 諛붾줈肄??묒닔 ??諛곗감 ?뺣낫媛 ?쒖떆?⑸땲??";
         };
         String dispatchReason = topCrew == null
-                ? "근처 크루 정보가 아직 없습니다."
-                : "가까운 크루 거리 " + Math.round(topCrew.distanceMeters()) + "m, 현재 이동 동선, 최근 수락 이력을 반영했습니다.";
+                ? "洹쇱쿂 ?щ（ ?뺣낫媛 ?꾩쭅 ?놁뒿?덈떎."
+                : "媛源뚯슫 ?щ（ 嫄곕━ " + Math.round(topCrew.distanceMeters()) + "m, ?꾩옱 ?대룞 ?숈꽑, 理쒓렐 ?섎씫 ?대젰??諛섏쁺?덉뒿?덈떎.";
 
         state.setDispatchContext(
                 matchScore,
@@ -721,7 +721,7 @@ public class SwapRequestService {
 
         ApplianceEntity appliance = applianceRepository.findBySwapRequest_Id(id)
                 .orElseGet(() -> applianceRepository.save(ApplianceEntity.create(swapRequest, applianceType)));
-        appliance.applyMockInspection(applianceType, "LG", modelName, "1~3년", "사용 흔적 있음");
+        appliance.applyMockInspection(applianceType, "LG", modelName, "1-3 years", "Visible signs of use");
         applianceRepository.save(appliance);
 
         applianceImageRepository.save(ApplianceImageEntity.customerCapture(
@@ -735,7 +735,7 @@ public class SwapRequestService {
                 swapRequest,
                 1500,
                 2400,
-                "사진 기반 Mock VLM 분석 결과로 산정된 예상 보상가입니다."
+                "?ъ쭊 湲곕컲 Mock VLM 遺꾩꽍 寃곌낵濡??곗젙???덉긽 蹂댁긽媛?낅땲??"
         ));
         swapRequest.changeStatus(SwapRequestStatus.PRE_VALUATION_READY.name());
         swapRequestRepository.save(swapRequest);
@@ -749,8 +749,8 @@ public class SwapRequestService {
                 valueOrDefault(request.applianceType(), swapRequest.getApplianceType()),
                 valueOrDefault(request.brand(), "LG"),
                 valueOrDefault(request.modelName(), "Unknown"),
-                valueOrDefault(request.estimatedAge(), "확인 필요"),
-                valueOrDefault(request.exteriorCondition(), "확인 필요")
+                valueOrDefault(request.estimatedAge(), "?뺤씤 ?꾩슂"),
+                valueOrDefault(request.exteriorCondition(), "?뺤씤 ?꾩슂")
         );
         applianceRepository.save(appliance);
         swapRequest.changeStatus(SwapRequestStatus.PRE_VALUATION_READY.name());

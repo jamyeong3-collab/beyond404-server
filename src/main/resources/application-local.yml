@@ -26,3 +26,7 @@ management:
     db:
       enabled: true
 
+kakao:
+  mobility:
+    rest-api-key: ${KAKAO_REST_API_KEY:}
+
