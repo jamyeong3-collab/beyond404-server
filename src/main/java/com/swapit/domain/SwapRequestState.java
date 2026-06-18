@@ -737,7 +737,7 @@ public class SwapRequestState {
     private int calculateEstimatedFinalCredit(int productPrice, String productGrade) {
         double rate = creditRateFor(productGrade, exchangeCount);
         this.creditRate = rate;
-        int productBasedCredit = (int) Math.round(Math.min(productPrice * rate, productPrice * creditCapRate));
+        int productBasedCredit = (int) Math.round(productPrice * rate);
         return scrapValue + productBasedCredit;
     }
 
