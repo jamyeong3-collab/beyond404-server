@@ -3,6 +3,7 @@ package com.swapit.service;
 import com.swapit.domain.SwapRequestState;
 import com.swapit.domain.entity.ApplianceEntity;
 import com.swapit.domain.entity.ApplianceImageEntity;
+import com.swapit.domain.entity.CrewReviewEntity;
 import com.swapit.domain.entity.PickupRequestEntity;
 import com.swapit.domain.entity.SwapRequestEntity;
 import com.swapit.domain.entity.UserEntity;
@@ -10,6 +11,7 @@ import com.swapit.domain.entity.ValuationEntity;
 import com.swapit.domain.enums.SwapRequestStatus;
 import com.swapit.dto.BookingRequest;
 import com.swapit.dto.BookingAvailabilityResponse;
+import com.swapit.dto.CrewReviewRequest;
 import com.swapit.dto.CrewCompletePickupRequest;
 import com.swapit.dto.CrewLocationRequest;
 import com.swapit.dto.CreateSwapRequestRequest;
@@ -24,6 +26,7 @@ import com.swapit.domain.entity.ApplianceSpecEntity;
 import com.swapit.repository.ApplianceImageRepository;
 import com.swapit.repository.ApplianceRepository;
 import com.swapit.repository.ApplianceSpecsRepository;
+import com.swapit.repository.CrewReviewRepository;
 import com.swapit.repository.PickupRequestRepository;
 import com.swapit.repository.SwapRequestRepository;
 import com.swapit.repository.UserRepository;
@@ -68,6 +71,7 @@ public class SwapRequestService {
     private final ApplianceSpecsRepository applianceSpecsRepository;
     private final KakaoDirectionsService kakaoDirectionsService;
     private final PickupRequestRepository pickupRequestRepository;
+    private final CrewReviewRepository crewReviewRepository;
 
     private final AtomicLong sequence = new AtomicLong(1);
     private final Map<Long, SwapRequestState> store = new ConcurrentHashMap<>();
@@ -291,6 +295,26 @@ public class SwapRequestService {
         return buildResponse(state);
     }
 
+    @Transactional
+    public SwapRequestResponse submitCrewReview(long id, CrewReviewRequest request) {
+        SwapRequestState state = findState(id);
+        SwapRequestEntity swapRequest = findSwapRequestEntity(id);
+
+        Long crewId = state.getCrewId();
+        if (crewId == null) {
+            throw new NoSuchElementException("Crew has not been assigned for swap request: " + id);
+        }
+
+        String normalizedComment = request.comment() == null ? null : request.comment().trim();
+        CrewReviewEntity review = crewReviewRepository.findBySwapRequest_Id(id)
+                .orElseGet(() -> CrewReviewEntity.create(swapRequest, crewId, request.rating(), normalizedComment));
+
+        review.updateReview(crewId, request.rating(), normalizedComment);
+        crewReviewRepository.save(review);
+
+        return buildResponse(state);
+    }
+
     public SwapRequestResponse advanceDeliveryTracking(long id) {
         SwapRequestState state = findState(id);
         state.advanceDeliveryTracking();
@@ -502,7 +526,56 @@ public class SwapRequestService {
 
     private SwapRequestResponse buildResponse(SwapRequestState state) {
         enrichGpsContext(state);
-        return augmentTracking(state, state.toResponse());
+        return augmentTracking(state, augmentCrewReview(state.toResponse()));
+    }
+
+    private SwapRequestResponse augmentCrewReview(SwapRequestResponse response) {
+        Long crewId = response.pickupRequest() == null ? null : response.pickupRequest().crewId();
+        SwapRequestResponse.CrewProfile crewProfile = response.crewProfile();
+
+        if (crewId != null && crewProfile != null) {
+            CrewReviewSnapshot snapshot = loadCrewReviewSnapshot(crewId);
+            crewProfile = new SwapRequestResponse.CrewProfile(
+                    crewProfile.name(),
+                    crewProfile.photoUrl(),
+                    snapshot.averageRating(),
+                    snapshot.reviewSummary().isEmpty() ? crewProfile.reviewSummary() : snapshot.reviewSummary()
+            );
+        }
+
+        SwapRequestResponse.CrewReview crewReview = crewReviewRepository.findBySwapRequest_Id(response.id())
+                .map(review -> new SwapRequestResponse.CrewReview(
+                        review.getRating(),
+                        review.getComment(),
+                        review.getCreatedAt().toLocalDateTime()
+                ))
+                .orElse(null);
+
+        return new SwapRequestResponse(
+                response.id(),
+                response.customerId(),
+                response.status(),
+                response.appliance(),
+                response.userConsent(),
+                response.captureEvidence(),
+                response.preValuation(),
+                response.rewardEstimate(),
+                response.selectedProduct(),
+                response.booking(),
+                response.pickupRequest(),
+                crewProfile,
+                crewReview,
+                response.dispatchInfo(),
+                response.tracking(),
+                response.finalValuation(),
+                response.credit(),
+                response.rewardOverview(),
+                response.deliveryTracking(),
+                response.pickupResultReport(),
+                response.recyclingReport(),
+                response.settlement(),
+                response.notifications()
+        );
     }
 
     private SwapRequestResponse augmentTracking(SwapRequestState state, SwapRequestResponse response) {
@@ -542,6 +615,7 @@ public class SwapRequestService {
                 response.booking(),
                 response.pickupRequest(),
                 response.crewProfile(),
+                response.crewReview(),
                 response.dispatchInfo(),
                 tracking,
                 response.finalValuation(),
@@ -553,6 +627,19 @@ public class SwapRequestService {
                 response.settlement(),
                 response.notifications()
         );
+    }
+
+    private CrewReviewSnapshot loadCrewReviewSnapshot(Long crewId) {
+        Double averageRating = crewReviewRepository.findAverageRatingByCrewId(crewId);
+        List<String> latestComments = crewReviewRepository.findAllByCrewIdOrderByCreatedAtDesc(crewId).stream()
+                .map(CrewReviewEntity::getComment)
+                .filter(comment -> comment != null && !comment.isBlank())
+                .limit(2)
+                .toList();
+
+        double computedRating = averageRating == null ? DEMO_CREW_RATING : averageRating;
+        double roundedRating = Math.round(computedRating * 10.0) / 10.0;
+        return new CrewReviewSnapshot(roundedRating, latestComments);
     }
 
     private SwapRequestResponse.RouteSummary resolveRoute(
@@ -1017,5 +1104,11 @@ public class SwapRequestService {
             this.heading = 0.0;
             this.speed = 0.0;
         }
+    }
+
+    private record CrewReviewSnapshot(
+            double averageRating,
+            List<String> reviewSummary
+    ) {
     }
 }

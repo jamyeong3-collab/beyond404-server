@@ -2,6 +2,7 @@ package com.swapit.controller;
 
 import com.swapit.dto.BookingRequest;
 import com.swapit.dto.BookingAvailabilityResponse;
+import com.swapit.dto.CrewReviewRequest;
 import com.swapit.dto.CreateSwapRequestRequest;
 import com.swapit.dto.InstantCallRequest;
 import com.swapit.dto.PhotoUploadRequest;
@@ -123,6 +124,14 @@ public class SwapRequestController {
     @PostMapping("/{id}/delivery/mock-progress")
     public SwapRequestResponse advanceDeliveryTracking(@PathVariable long id) {
         return swapRequestService.advanceDeliveryTracking(id);
+    }
+
+    @PostMapping("/{id}/crew-review")
+    public SwapRequestResponse submitCrewReview(
+            @PathVariable long id,
+            @Valid @RequestBody CrewReviewRequest request
+    ) {
+        return swapRequestService.submitCrewReview(id, request);
     }
 
     @GetMapping("/{id}")

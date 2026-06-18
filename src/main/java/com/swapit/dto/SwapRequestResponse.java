@@ -17,6 +17,7 @@ public record SwapRequestResponse(
         Booking booking,
         PickupRequest pickupRequest,
         CrewProfile crewProfile,
+        CrewReview crewReview,
         DispatchInfo dispatchInfo,
         Tracking tracking,
         FinalValuation finalValuation,
@@ -116,6 +117,13 @@ public record SwapRequestResponse(
             String photoUrl,
             double rating,
             List<String> reviewSummary
+    ) {
+    }
+
+    public record CrewReview(
+            int rating,
+            String comment,
+            LocalDateTime createdAt
     ) {
     }
 
